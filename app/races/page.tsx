@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Race } from '../types/race';
 import RaceCard from '../components/RaceCard';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function RacesPage() {
+function RacesContent() {
   const [races, setRaces] = useState<Race[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,5 +130,13 @@ export default function RacesPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function RacesPage() {
+  return (
+    <Suspense fallback={<div className="p-4">Loading...</div>}>
+      <RacesContent />
+    </Suspense>
   );
 } 
