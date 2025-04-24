@@ -1,213 +1,312 @@
 'use client';
 
-import { motion } from 'motion/react';
-import { FaChartLine, FaTachometerAlt, FaCloudSun, FaFlag } from 'react-icons/fa';
-import { PiTireDuotone } from "react-icons/pi";
+import { useState, useEffect, Suspense, useMemo } from 'react';
+import { StrategyAnalysis } from '../types/strategy';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { mockStrategies } from '../data/mockStrategies';
+import { mockRaces, mockTeams, mockCompounds, type Driver } from '../data/mockData';
 
-// Placeholder data - will be replaced with API data later
-const raceStats = {
-  fastestLap: {
-    driver: 'Max Verstappen',
-    time: '1:27.097',
-    lap: 45,
-    team: 'Red Bull Racing'
-  },
-  averagePace: {
-    leader: '1:28.456',
-    midfield: '1:29.789',
-    backmarkers: '1:31.234'
-  },
-  overtakes: 42,
-  safetyCars: 1,
-  pitStops: 45
-};
+function AnalysisContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [analysis, setAnalysis] = useState<StrategyAnalysis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [selectedRace, setSelectedRace] = useState<string>('');
+  const [selectedTeam, setSelectedTeam] = useState<string>('');
+  const [selectedDriver, setSelectedDriver] = useState<string>('');
+  const [selectedCompound, setSelectedCompound] = useState<string>('');
+  const [availableDrivers, setAvailableDrivers] = useState<Driver[]>([]);
 
-const tireAnalysis = [
-  {
-    compound: 'Soft',
-    averageLapTime: '1:28.123',
-    degradation: '0.2s per lap',
-    totalLaps: 25
-  },
-  {
-    compound: 'Medium',
-    averageLapTime: '1:28.456',
-    degradation: '0.1s per lap',
-    totalLaps: 35
-  },
-  {
-    compound: 'Hard',
-    averageLapTime: '1:28.789',
-    degradation: '0.05s per lap',
-    totalLaps: 40
-  }
-];
+  // Memoize all data to prevent unnecessary recalculations
+  const allDrivers = useMemo(() => mockTeams.flatMap(team => team.drivers), []);
+  const strategies = useMemo(() => [...mockStrategies], []);
 
-const weatherImpact = {
-  temperature: '24°C',
-  trackTemp: '32°C',
-  humidity: '45%',
-  windSpeed: '12 km/h',
-  conditions: 'Clear'
-};
+  // Initialize available drivers
+  useEffect(() => {
+    setAvailableDrivers(allDrivers);
+  }, [allDrivers]);
 
-export default function RaceAnalysisPage() {
+  // Update available drivers when team selection changes
+  useEffect(() => {
+    if (selectedTeam) {
+      const team = mockTeams.find(t => t.id === selectedTeam);
+      const teamDrivers = team?.drivers || [];
+      setAvailableDrivers(teamDrivers);
+      
+      if (!teamDrivers.some(d => d.id === selectedDriver)) {
+        setSelectedDriver('');
+      }
+    } else {
+      setAvailableDrivers(allDrivers);
+    }
+  }, [selectedTeam, allDrivers, selectedDriver]);
+
+  // Fetch analysis data
+  useEffect(() => {
+    const fetchAnalysis = async () => {
+      try {
+        setLoading(true);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        let filtered = [...strategies];
+        if (selectedRace) filtered = filtered.filter(s => s.raceId === selectedRace);
+        if (selectedTeam) filtered = filtered.filter(s => s.teamId === selectedTeam);
+        if (selectedDriver) filtered = filtered.filter(s => s.driverId === selectedDriver);
+        if (selectedCompound) {
+          filtered = filtered.filter(s => 
+            s.strategy.some(stint => stint.compound === selectedCompound)
+          );
+        }
+
+        setAnalysis(filtered);
+        setError(null);
+      } catch (err) {
+        setError('Failed to fetch analysis data');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalysis();
+  }, [selectedRace, selectedTeam, selectedDriver, selectedCompound, strategies]);
+
+  // Handle page change
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    const params = new URLSearchParams(searchParams);
+    params.set('page', newPage.toString());
+    router.push(`/analysis?${params.toString()}`);
+  };
+
+  // Helper function to get race name
+  const getRaceName = (raceId: string) => {
+    return mockRaces.find(r => r.id === raceId)?.name || raceId;
+  };
+
+  // Helper function to get team name and color
+  const getTeamInfo = (teamId: string) => {
+    const team = mockTeams.find(t => t.id === teamId);
+    return {
+      name: team?.name || teamId,
+      color: team?.color || '#000000'
+    };
+  };
+
+  // Helper function to get driver name and number
+  const getDriverInfo = (driverId: string) => {
+    const driver = allDrivers.find(d => d.id === driverId);
+    return {
+      name: driver?.name || driverId,
+      number: driver?.number || 0
+    };
+  };
+
+  // Helper function to get compound color
+  const getCompoundColor = (compound: string) => {
+    return mockCompounds.find(c => c.id === compound)?.color || '#000000';
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white pt-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-12"
-        >
-          {/* Race Overview */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-white/10">
-            <h2 className="text-2xl font-bold mb-6 flex items-center">
-              <FaFlag className="mr-2 text-red-500" />
-              Race Overview
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Fastest Lap</h3>
-                <p className="text-2xl font-bold text-yellow-500">{raceStats.fastestLap.time}</p>
-                <p className="text-gray-400">{raceStats.fastestLap.driver}</p>
-                <p className="text-sm text-gray-500">Lap {raceStats.fastestLap.lap}</p>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Overtakes</h3>
-                <p className="text-2xl font-bold text-green-500">{raceStats.overtakes}</p>
-                <p className="text-gray-400">Total Passes</p>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Safety Cars</h3>
-                <p className="text-2xl font-bold text-yellow-500">{raceStats.safetyCars}</p>
-                <p className="text-gray-400">Deployments</p>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Pit Stops</h3>
-                <p className="text-2xl font-bold text-blue-500">{raceStats.pitStops}</p>
-                <p className="text-gray-400">Total Stops</p>
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Pace Analysis */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-white/10">
-            <h2 className="text-2xl font-bold mb-6 flex items-center">
-              <FaTachometerAlt className="mr-2 text-red-500" />
-              Pace Analysis
-            </h2>
-            <div className="space-y-4">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Average Lap Times</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Front Runners</span>
-                    <span className="text-yellow-500">{raceStats.averagePace.leader}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Midfield</span>
-                    <span className="text-blue-500">{raceStats.averagePace.midfield}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Backmarkers</span>
-                    <span className="text-gray-500">{raceStats.averagePace.backmarkers}</span>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Tire Analysis */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-white/10">
-            <h2 className="text-2xl font-bold mb-6 flex items-center">
-              <PiTireDuotone className="mr-2 text-red-500" />
-              Tire Performance
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {tireAnalysis.map((tire, index) => (
-                <motion.div
-                  key={index}
-                  whileHover={{ scale: 1.02 }}
-                  className="bg-white/5 p-6 rounded-lg border border-white/10"
-                >
-                  <h3 className="text-xl font-semibold mb-4">{tire.compound}</h3>
-                  <div className="space-y-2">
-                    <p className="text-gray-400">Avg. Lap: <span className="text-white">{tire.averageLapTime}</span></p>
-                    <p className="text-gray-400">Degradation: <span className="text-white">{tire.degradation}</span></p>
-                    <p className="text-gray-400">Total Laps: <span className="text-white">{tire.totalLaps}</span></p>
-                  </div>
-                </motion.div>
+    <div className="min-h-screen bg-gray-900 text-white p-4">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold mb-8">Strategy Analysis</h1>
+        
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div>
+            <label className="block text-sm font-medium mb-2">Race</label>
+            <select
+              value={selectedRace}
+              onChange={(e) => setSelectedRace(e.target.value)}
+              className="w-full p-2 rounded bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Races</option>
+              {mockRaces.map(race => (
+                <option key={race.id} value={race.id}>
+                  {race.name}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
-          {/* Weather Impact */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-white/10">
-            <h2 className="text-2xl font-bold mb-6 flex items-center">
-              <FaCloudSun className="mr-2 text-red-500" />
-              Weather Impact
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Air Temp</h3>
-                <p className="text-2xl font-bold">{weatherImpact.temperature}</p>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Track Temp</h3>
-                <p className="text-2xl font-bold">{weatherImpact.trackTemp}</p>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Humidity</h3>
-                <p className="text-2xl font-bold">{weatherImpact.humidity}</p>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/5 p-6 rounded-lg border border-white/10"
-              >
-                <h3 className="text-xl font-semibold mb-4">Wind</h3>
-                <p className="text-2xl font-bold">{weatherImpact.windSpeed}</p>
-              </motion.div>
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Team</label>
+            <select
+              value={selectedTeam}
+              onChange={(e) => setSelectedTeam(e.target.value)}
+              className="w-full p-2 rounded bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Teams</option>
+              {mockTeams.map(team => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Placeholder for Strategy Analysis */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-white/10">
-            <h2 className="text-2xl font-bold mb-6 flex items-center">
-              <FaChartLine className="mr-2 text-red-500" />
-              Strategy Analysis
-            </h2>
-            <p className="text-gray-400">Detailed race strategy analysis coming soon...</p>
+          <div>
+            <label className="block text-sm font-medium mb-2">Driver</label>
+            <select
+              value={selectedDriver}
+              onChange={(e) => setSelectedDriver(e.target.value)}
+              className="w-full p-2 rounded bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Drivers</option>
+              {availableDrivers.map(driver => (
+                <option key={driver.id} value={driver.id}>
+                  #{driver.number} {driver.name}
+                </option>
+              ))}
+            </select>
           </div>
-        </motion.div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Tire Compound</label>
+            <select
+              value={selectedCompound}
+              onChange={(e) => setSelectedCompound(e.target.value)}
+              className="w-full p-2 rounded bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Compounds</option>
+              {mockCompounds.map(compound => (
+                <option key={compound.id} value={compound.id}>
+                  {compound.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-900 text-white p-4 rounded mb-4">
+            {error}
+          </div>
+        )}
+
+        {/* Analysis Grid */}
+        {!loading && !error && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {analysis.map((strategy) => {
+              const teamInfo = getTeamInfo(strategy.teamId);
+              const driverInfo = getDriverInfo(strategy.driverId);
+              
+              return (
+                <div
+                  key={strategy.id}
+                  className="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors"
+                >
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold mb-2">
+                      {getRaceName(strategy.raceId)}
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-4 h-4 rounded-full"
+                        style={{ backgroundColor: teamInfo.color }}
+                      />
+                      <span className="font-medium">{teamInfo.name}</span>
+                    </div>
+                    <div className="text-gray-400">
+                      #{driverInfo.number} {driverInfo.name}
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="flex justify-between text-sm">
+                      <span>Total Time:</span>
+                      <span className="font-mono">{strategy.totalTime}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Position Change:</span>
+                      <span className={strategy.positionGain > 0 ? 'text-green-400' : strategy.positionGain < 0 ? 'text-red-400' : ''}>
+                        {strategy.positionGain > 0 ? '+' : ''}{strategy.positionGain}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Strategy:</h3>
+                    {strategy.strategy.map((stint, index) => {
+                      const backgroundColor = getCompoundColor(stint.compound);
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-2 rounded"
+                          style={{ 
+                            backgroundColor,
+                            color: '#000000'
+                          }}
+                        >
+                          <span className="text-sm font-medium">Stint {stint.stint}</span>
+                          <span className="text-sm">
+                            Laps {stint.startLap}-{stint.endLap}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {strategy.notes && (
+                    <div className="mt-4 text-sm text-gray-400">
+                      {strategy.notes}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!loading && !error && analysis.length > 0 && (
+          <div className="flex justify-center mt-8">
+            <div className="flex gap-2">
+              {Array.from({ length: Math.ceil(analysis.length / 10) }, (_, i) => i + 1).map(
+                (pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`px-4 py-2 rounded ${
+                      page === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* No Results */}
+        {!loading && !error && analysis.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-400">No strategies found matching your criteria</p>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+export default function AnalysisPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <AnalysisContent />
+    </Suspense>
   );
 }
