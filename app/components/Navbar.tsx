@@ -42,14 +42,19 @@ export default function Navbar() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
                       isActive
-                        ? 'bg-gradient-to-r from-red-500/20 to-yellow-500/20 text-white border border-white/10'
-                        : 'text-gray-300 hover:bg-white/10 hover:text-white border border-transparent'
+                        ? 'text-blue-500 bg-blue-500/10'
+                        : 'text-gray-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    {item.icon && <item.icon className="mr-2" />}
-                    {item.name}
+                    {item.icon && (
+                      <item.icon
+                        data-testid={`${item.name.toLowerCase()}-icon`}
+                        className="w-5 h-5"
+                      />
+                    )}
+                    <span>{item.name}</span>
                   </Link>
                 );
               })}
